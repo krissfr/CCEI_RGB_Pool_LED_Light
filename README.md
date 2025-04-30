@@ -1,5 +1,5 @@
-# CCEI RGB Pool LED Light
-an rgb pool led light controler for CCEI Noria RGBW led pool light
+# CCEI RGB Pool LED Light with esphome
+an rgb pool led light controler for CCEI Noria RGBW led pool light . You can control it with Home Assistant, because it an ESPhome code.
 
 ![alt text](https://github.com/krissfr/CCEI_RGB_Pool_LED_Light/blob/main/bigpicture.jpg)
 
