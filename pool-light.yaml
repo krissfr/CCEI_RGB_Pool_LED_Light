@@ -124,7 +124,7 @@ number:
                   value: !lambda "return id(seqnum).state;"
         - if:
             condition:
-              - lambda: 'return (id(seqnum).state < id(my_prev_seq));' # if previous id sequence is lower than new id sequence, we have to reinitialise the rgb led pool light
+              - lambda: 'return (id(seqnum).state < id(my_prev_seq));' # if previous id sequence is higher than new id sequence, we have to reinitialise the rgb led pool light
             then:
               - output.turn_off: dimmer1
               - delay: 2s # off for 2 sec reset the sequence
