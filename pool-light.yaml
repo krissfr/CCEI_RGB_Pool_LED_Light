@@ -1,0 +1,178 @@
+esphome:
+  name: pool-light
+  friendly_name: pool-light
+  platformio_options:
+    platform: https://github.com/lucaskatayama/platform-espressif32.git#feat/seeed_xiao_esp32c6.json
+
+esp32:
+  board: seeed_xiao_esp32c6
+  variant: ESP32C6
+  flash_size: 4MB
+  framework:
+    type: esp-idf
+    version: 5.3.1
+    platform_version: 6.9.0
+
+external_components:
+  - source: github://pr#7072
+    components: [ ac_dimmer ]
+
+
+# Enable logging
+logger:
+  baud_rate: 115200
+  level: NONE
+  hardware_uart: USB_SERIAL_JTAG
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "put_your_api_key_here"
+
+ota:
+  - platform: esphome
+    password: "put_your_ota_password_here"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Pool-Light Fallback Hotspot"
+    password: "put_an_ap_password_here"
+
+captive_portal:
+    
+#########################################
+####                                 ####
+####     CCEI RGBW led Projector     ####
+####                                 ####
+#########################################
+
+# manual : https://smiling-melody-2b3f378555.media.strapiapp.com/FR_c46c646098.pdf
+
+# Une coupure de courant de <1s permet de passer à la couleur / séquence suivante. Une fois toutes les couleurs visualisées, les éclairages reviennent à la première couleur (blanc pur).
+# Une coupure de 2s réinitialise la synchronisation des éclairages et permet de revenir au mode 2 (bleu)
+# La remise en route après une longue coupure (>4s) rallume les éclairages sur la dernière couleur sélectionnée
+
+#hardware :
+#  - xiao esp32c6
+#  - Robodyn	AC Dimmer Module 4A (vcc:3.3vdc, gnd, ZeroCross, PWM)
+#  - 12v ac to 5v dc converter ( https://www.amazon.fr/dp/B07TVNMHQQ ) to power the esp32c6 via usb-c ( https://www.amazon.fr/QIANRENON-adaptateurs-broches-sans-soudure/dp/B0DXK4R2HM )
+
+# Voltage : 12v AC
+# maximum power : 30w
+
+########################################################################
+
+# Example configuration entry
+output:
+  - platform: ac_dimmer
+    id: dimmer1
+    min_power: 0
+    gate_pin: GPIO20
+    zero_cross_pin:
+      number: GPIO18
+      mode:
+        input: true
+      inverted: yes
+
+switch:
+  - platform: output
+    id: sw1
+    name: "Pool  light"
+    output: dimmer1
+    restore_mode: ALWAYS_ON
+
+
+# Global variable to store previous sequence value
+globals:
+  - id: my_prev_seq
+    type: int
+    restore_value: no
+    initial_value: '99'
+
+## for debuging
+#interval:
+#  - interval: 2s
+#    then:
+#      - logger.log:
+#          format: "Prev_value %d and Sequence number %lf and mode index %d"
+#          args: [ 'id(my_prev_seq)', 'id(seqnum).state', 'id(light_mode).active_index().value()' ]
+
+# number for sequence
+number:
+  - platform: template
+    name: "Sequence number"
+    id: seqnum
+    optimistic: true
+    min_value: 0
+    max_value: 17
+    restore_value: True
+    step: 1
+    mode: slider
+    internal: True
+    on_value:
+      then:
+        - if:
+            condition:
+              - lambda: 'return (id(my_prev_seq) == 99 );' # if startup, we need to remap the prev_value with the memorised sequence
+            then:
+              - globals.set:
+                  id: my_prev_seq
+                  value: !lambda "return id(seqnum).state;"
+        - if:
+            condition:
+              - lambda: 'return (id(seqnum).state < id(my_prev_seq));' # if previous id sequence is lower than new id sequence, we have to reinitialise the rgb led pool light
+            then:
+              - output.turn_off: dimmer1
+              - delay: 2s # off for 2 sec reset the sequence
+              - output.turn_on: dimmer1
+              - delay: 8s
+              - globals.set:
+                  id: my_prev_seq
+                  value: '0'
+        - repeat:
+            count: !lambda "return (id(seqnum).state - id(my_prev_seq));" # do the sequence until the sequence number
+            then:
+              - output.turn_off: dimmer1
+              - delay: 750ms
+              - output.turn_on: dimmer1
+              - delay: 1s
+        - switch.turn_on: sw1  # to set the switch at the right state
+        - globals.set:
+            id: my_prev_seq
+            value: !lambda "return id(seqnum).state;"
+
+
+select:
+  - platform: template
+    name: "Pool light mode"
+    id: light_mode
+    optimistic: true
+    options:
+    - bleu
+    - Bleu Lagon
+    - Cyan
+    - Violet
+    - Magenta
+    - Rose
+    - Rouge
+    - Orange
+    - Vert
+    - Vert d'eau
+    - Fast gradient
+    - Slow raimbow
+    - Colours parade
+    - Techno rhythm
+    - Blue variations
+    - Random parade
+    - Ramdom colours
+    - Blanc pur
+    restore_value: true
+    on_value:
+      then:
+        - number.set:
+            id: seqnum
+            value: !lambda "return id(light_mode).active_index().value();"
